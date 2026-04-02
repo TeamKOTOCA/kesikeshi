@@ -1,20 +1,35 @@
-import { pipeline, env, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
+import { pipeline, env, RawImage, AutoModelForSemanticSegmentation } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.0-next.7';
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 
+const semanticSegmentationMappings = AutoModelForSemanticSegmentation.MODEL_CLASS_MAPPINGS?.[0];
+if (semanticSegmentationMappings && !semanticSegmentationMappings.has('SegformerForSemanticSegmentation')) {
+    semanticSegmentationMappings.set('SegformerForSemanticSegmentation', 'SegformerForSemanticSegmentation');
+}
+
 let segmenter;
 
 
+let initializedConfig;
+
 self.onmessage = async (e) => {
-    const { buffer, width, height, modelPath, webgpu, quantized } = e.data;
+    const { buffer, width, height, modelPath, device, dtype } = e.data;
 
     try {
-        if (!segmenter) {
+        const resolvedDevice = device ?? 'wasm';
+        const resolvedDtype = dtype ?? (resolvedDevice === 'webgpu' ? 'fp32' : 'q8');
+
+        if (!segmenter || initializedConfig?.modelPath !== modelPath || initializedConfig.device !== resolvedDevice || initializedConfig.dtype !== resolvedDtype) {
             segmenter = await pipeline('image-segmentation', modelPath, {
-                device: webgpu ? 'webgpu' : 'wasm', 
-                quantized: quantized
+                device: resolvedDevice,
+                dtype: resolvedDtype
             });
+            initializedConfig = {
+                modelPath,
+                device: resolvedDevice,
+                dtype: resolvedDtype
+            };
         }
 
         // RGBA -> RGB 変換
