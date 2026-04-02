@@ -1,41 +1,64 @@
-// Transformers.jsをCDNからロード
-import { pipeline, env, RawImage } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+import { pipeline, env, RawImage } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers';
 
-// GitHub Pages等の静的ホスト向け設定
 env.allowLocalModels = false;
-env.useBrowserCache = false;
+env.useBrowserCache = true;
 
 let segmenter;
 
+
 self.onmessage = async (e) => {
-    const { buffer, width, height } = e.data;
+    const { buffer, width, height, modelPath, webgpu, quantized } = e.data;
 
     try {
-        // モデルのロード (初回のみ)
         if (!segmenter) {
-            segmenter = await pipeline('image-segmentation', 'Briaai/RMBG-2.0');
+            // まずは確実に動く1.4でテストしてください
+            segmenter = await pipeline('image-segmentation', modelPath, {
+                // ここが重要！
+                device: webgpu ? 'webgpu' : 'wasm', 
+                quantized: quantized 
+            });
         }
 
-        // 移転されたバッファ(Uint8Array)をRawImage形式にラップ
-        // 4はRGBAのチャンネル数
-        const rawImage = new RawImage(new Uint8Array(buffer), width, height, 4);
+        // RGBA -> RGB 変換
+        const rgba = new Uint8ClampedArray(buffer);
+        const rgb = new Uint8Array(width * height * 3);
+        for (let i = 0; i < width * height; i++) {
+            rgb[i * 3]     = rgba[i * 4];
+            rgb[i * 3 + 1] = rgba[i * 4 + 1];
+            rgb[i * 3 + 2] = rgba[i * 4 + 2];
+        }
 
-        // 推論実行 (ここでWasmがフル稼働)
+        const rawImage = new RawImage(rgb, width, height, 3);
+
+        // 推論実行
         const output = await segmenter(rawImage);
 
-        // 出力されたCanvasからピクセルデータ(ArrayBuffer)を取得
-        const outCtx = output.canvas.getContext('2d');
-        const outImageData = outCtx.getImageData(0, 0, output.canvas.width, output.canvas.height);
-        const outBuffer = outImageData.data.buffer;
+        /* 修正ポイント：
+           output.canvas が無い場合に備え、
+           output.mask (RawImage) を使ってピクセルデータを作成する
+        */
+        const mask = output.mask || output[0].mask; 
+        
+        // 元の画像のRGBに、モデルが作ったAlpha(透明度)を合成する
+        const outRGBA = new Uint8ClampedArray(width * height * 4);
+        for (let i = 0; i < width * height; i++) {
+            outRGBA[i * 4]     = rgba[i * 4];     // R
+            outRGBA[i * 4 + 1] = rgba[i * 4 + 1]; // G
+            outRGBA[i * 4 + 2] = rgba[i * 4 + 2]; // B
+            outRGBA[i * 4 + 3] = mask.data[i];    // A (モデルが計算した透過値)
+        }
 
-        // メインスレッドに所有権を戻す
+        const outBuffer = outRGBA.buffer;
+
+        // メインスレッドに返却
         self.postMessage({
             outputBuffer: outBuffer,
-            width: output.canvas.width,
-            height: output.canvas.height
+            width: width,
+            height: height
         }, [outBuffer]);
 
     } catch (err) {
+        console.error(err);
         self.postMessage({ error: err.message });
     }
 };
