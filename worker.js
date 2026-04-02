@@ -11,11 +11,9 @@ self.onmessage = async (e) => {
 
     try {
         if (!segmenter) {
-            // まずは確実に動く1.4でテストしてください
             segmenter = await pipeline('image-segmentation', modelPath, {
-                // ここが重要！
                 device: webgpu ? 'webgpu' : 'wasm', 
-                quantized: quantized 
+                quantized: quantized
             });
         }
 
@@ -33,13 +31,8 @@ self.onmessage = async (e) => {
         // 推論実行
         const output = await segmenter(rawImage);
 
-        /* 修正ポイント：
-           output.canvas が無い場合に備え、
-           output.mask (RawImage) を使ってピクセルデータを作成する
-        */
         const mask = output.mask || output[0].mask; 
         
-        // 元の画像のRGBに、モデルが作ったAlpha(透明度)を合成する
         const outRGBA = new Uint8ClampedArray(width * height * 4);
         for (let i = 0; i < width * height; i++) {
             outRGBA[i * 4]     = rgba[i * 4];     // R
@@ -50,7 +43,6 @@ self.onmessage = async (e) => {
 
         const outBuffer = outRGBA.buffer;
 
-        // メインスレッドに返却
         self.postMessage({
             outputBuffer: outBuffer,
             width: width,

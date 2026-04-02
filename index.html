@@ -41,7 +41,6 @@
         const ctx = resultCanvas.getContext('2d');
         let now_model = null;
 
-        // 1. 扱いやすいオブジェクト形式
         const modellist = {
             "modnet": {
                 path: "Xenova/modnet",
@@ -49,9 +48,9 @@
                 webgpu: false,
                 quantized: true
             },
-            "segformer-b5": {
-                path: "onnx-community/BiRefNet-ONNX",
-                description: "最新の超高精度モデル",
+            "test": {
+                path: "briaai/RMBG-1.4",
+                description: "test",
                 webgpu: false,
                 quantized: false
             }
@@ -99,7 +98,6 @@
 
             status.textContent = `${now_model.path} で実行中...`;
             
-            // 3. now_model の情報を使ってシンプルに送信
             worker.postMessage({ 
                 buffer, 
                 width, 
