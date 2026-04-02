@@ -185,7 +185,7 @@
             text-align: center;
         }
 
-        #thanks h2{
+        #thanks h2,#thanks p{
             color: #cbd5f5;
         }
         #table_scroller{
