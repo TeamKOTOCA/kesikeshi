@@ -27,7 +27,7 @@
                 <p>ファイルをドロップしてアップロード</p>
                 <p class="hint">またはクリックしてファイルを選択（最大 10MB）</p>
             </div>
-            <input type="file" id="fileInput" accept="image/*">
+            <input type="file" id="fileInput" accept="image/*" multiple>
             <div class="control-grid">
                 <label for="model_list">モデル</label>
                 <select id="model_list">
@@ -45,7 +45,10 @@
         
         <section id="thanks">
         <h2>Thanks</h2>
-        <p>このサイトは<a herf="https://github.com/povo-43">Povo43</a>のTransformers.jsへの興味によって趣味で作られました。</p>
+        <p>
+            このサイトは<a herf="https://github.com/povo-43">Povo43</a>のTransformers.jsへの興味によって趣味で作られました。<br>
+            モデルの検証は手作業です。
+        </p>
         <div id="table_scroller">
             <table>
                 <thead>
@@ -64,15 +67,25 @@
                         <td><a href="https://huggingface.co/docs/transformers.js" target="_blank">Link</a></td>
                     </tr>
                     <tr>
-                        <td rowspan="2">Models</td>
+                        <td rowspan="4">Models</td>
                         <td>RMBG-1.4</td>
                         <td class="desc">BRIA AIによって開発された高品質な背景除去モデル。</td>
                         <td><a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ja" target="_blank">CC BY-NC 4.0</a></td>
                     </tr>
                     <tr>
                         <td>MODNet</td>
-                        <td class="desc">ZHKUN氏らによって提案された、リアルタイム処理に優れたポートレート特化型の切り抜きモデル。</td>
+                        <td class="desc">リアルタイム性に優れたポートレート（人）特化型モデル。エッジの処理が高速です。</td>
                         <td><a href="https://github.com/ZHKUN/MODNet" target="_blank">GitHub</a></td>
+                    </tr>
+                    <tr>
+                        <td>ISNet</td>
+                        <td class="desc">物体と背景の境界を正確に捉える汎用モデル。RMBGの代替としても優秀です。</td>
+                        <td><a href="https://huggingface.co/imgly/isnet-general-onnx" target="_blank">HF Hub</a></td>
+                    </tr>
+                    <tr>
+                        <td>BEN2</td>
+                        <td class="desc">高度な境界線抽出が可能な最新の高性能モデル。より複雑な背景でも精度の高い切り抜きが期待できます。</td>
+                        <td><a href="https://huggingface.co/onnx-community/BEN2-ONNX" target="_blank">HF Hub</a></td>
                     </tr>
                 </tbody>
             </table>
@@ -96,22 +109,27 @@
         const modellist = {
             "RMBG-1.4": {
                 path: "briaai/RMBG-1.4",
-                description: "高性能",
+                description: "汎用 - 中速",
                 device: "wasm",
                 dtype: "fp32"
             },
             "modnet": {
                 path: "Xenova/modnet",
-                description: "軽量&高速",
+                description: "人専用 - 高速",
                 device: "wasm",
                 dtype: "q8"
             },
-            "test": {
-                path: "Xenova/face-parsing",
-                description: "非推奨",
+            "isnet": {
+                path: "imgly/isnet-general-onnx",
+                description: "汎用 - RMBGの代用",
                 device: "wasm",
-                dtype: "q8",
-                masks: [1, 2, 3, 4, 5, 10, 11, 12, 13]
+                dtype: "fp32"
+            },
+            "BEN2": {
+                path: "onnx-community/BEN2-ONNX",
+                description: "高性能",
+                device: "wasm",
+                dtype: "fp16"
             }
         };
 
@@ -143,7 +161,7 @@
             Object.entries(modellist).forEach(([key, model]) => {
                 const opt = document.createElement('option');
                 opt.value = model.path;
-                opt.textContent = `${model.description} (${key}) — ${formatModelLabel(model)}`;
+                opt.textContent = `${model.description} (${key}) — ${model.path}`;
                 modellist_ui.appendChild(opt);
             });
 
