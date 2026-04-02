@@ -297,6 +297,7 @@
             const basePixels = new Uint8ClampedArray(imageData.data);
             cardRefs.basePixels = basePixels;
             cardRefs.baseImageData = new ImageData(new Uint8ClampedArray(basePixels), width, height);
+            cardRefs.baseBitmap = bitmap;
 
             const requestPromise = new Promise((resolve, reject) => {
                 pendingRequests.set(requestId, { ...cardRefs, resolve, reject });
@@ -383,7 +384,9 @@
         };
 
         const editorOverlay = createEditorOverlay();
-        const editorCanvas = editorOverlay.querySelector('.editor-canvas-wrap canvas');
+        const editorBaseCanvas = editorOverlay.querySelector('.editor-base-canvas');
+        const editorMaskCanvas = editorOverlay.querySelector('.editor-mask-canvas');
+        const editorCanvas = editorMaskCanvas;
         const editorTitle = editorOverlay.querySelector('.editor-title');
         const brushSizeInput = editorOverlay.querySelector('.brush-size');
         const brushSizeLabel = editorOverlay.querySelector('.brush-size-value');
@@ -391,7 +394,8 @@
         const closeEditorButton = editorOverlay.querySelector('.editor-close');
         const cancelEditButton = editorOverlay.querySelector('.cancel-edit');
         const applyEditButton = editorOverlay.querySelector('.apply-edit');
-        const editorCtx = editorCanvas.getContext('2d');
+        let editorCtx = editorMaskCanvas.getContext('2d');
+        let editorBaseCtx = editorBaseCanvas.getContext('2d');
         const editorState = {
             activeCard: null,
             maskData: null,
@@ -408,10 +412,19 @@
 
         const renderEditorPreview = () => {
             if (!editorState.activeCard || !editorState.maskData) {
-                editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
+                editorBaseCtx.clearRect(0, 0, editorBaseCanvas.width, editorBaseCanvas.height);
+                editorCtx.clearRect(0, 0, editorMaskCanvas.width, editorMaskCanvas.height);
                 return;
             }
-            editorCtx.putImageData(editorState.activeCard.baseImageData, 0, 0);
+            editorBaseCtx.clearRect(0, 0, editorBaseCanvas.width, editorBaseCanvas.height);
+            editorBaseCtx.globalAlpha = 0.35;
+            if (editorState.activeCard.baseBitmap) {
+                editorBaseCtx.drawImage(editorState.activeCard.baseBitmap, 0, 0, editorState.width, editorState.height);
+            } else {
+                editorBaseCtx.putImageData(editorState.activeCard.baseImageData, 0, 0);
+            }
+            editorBaseCtx.globalAlpha = 1;
+            editorCtx.clearRect(0, 0, editorMaskCanvas.width, editorMaskCanvas.height);
             const overlayData = editorCtx.createImageData(editorState.width, editorState.height);
             for (let i = 0, len = editorState.maskData.length; i < len; i++) {
                 const alpha = editorState.maskData[i];
@@ -498,8 +511,12 @@
             editorState.width = card.width;
             editorState.height = card.height;
             editorState.maskData = new Uint8ClampedArray(card.maskData);
-            editorCanvas.width = editorState.width;
-            editorCanvas.height = editorState.height;
+            editorBaseCanvas.width = editorState.width;
+            editorBaseCanvas.height = editorState.height;
+            editorMaskCanvas.width = editorState.width;
+            editorMaskCanvas.height = editorState.height;
+            editorBaseCtx = editorBaseCanvas.getContext('2d');
+            editorCtx = editorMaskCanvas.getContext('2d');
             brushSizeInput.value = editorState.brushSize;
             updateBrushLabel(editorState.brushSize);
             editorTitle.textContent = card.fileName ? `${card.fileName} のマスク` : 'マスク編集';
@@ -560,10 +577,11 @@
                         <h3 class="editor-title">マスク編集</h3>
                         <button type="button" class="editor-close" aria-label="閉じる">×</button>
                     </header>
-                    <div class="editor-body">
-                        <div class="editor-canvas-wrap">
-                            <canvas width="1" height="1"></canvas>
-                        </div>
+                        <div class="editor-body">
+                            <div class="editor-canvas-wrap">
+                                <canvas class="editor-base-canvas" width="1" height="1"></canvas>
+                                <canvas class="editor-mask-canvas" width="1" height="1"></canvas>
+                            </div>
                         <p class="editor-hint">描画で消しすぎ・残しすぎを直接修正できます。残すモードで描くと背景を復元、消すモードで描くと透明にします。</p>
                         <div class="editor-controls">
                             <button type="button" data-mode="add" class="active">残す</button>
