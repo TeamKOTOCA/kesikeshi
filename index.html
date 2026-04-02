@@ -11,127 +11,7 @@
     <meta property="og:url" content="https://kesikeshi.local/">
     <meta property="og:image" content="https://dummyimage.com/1200x630/1f2933/ffffff.png&amp;text=Zero-Copy+BG">
     <meta name="twitter:card" content="summary_large_image">
-    <style>
-        :root {
-            font: 400 16px "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
-            color: #111;
-            background-color: #0f172a;
-        }
-        * { box-sizing: border-box; }
-        body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 55%), #0f172a; display: flex; justify-content: center; }
-        .surface {
-            width: min(100%, 960px);
-            padding: 2.5rem;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-        .panel {
-            background: #ffffff;
-            padding: 2rem;
-            box-shadow: 0 25px 60px rgba(15,23,42,0.35);
-            display: grid;
-            gap: 1.25rem;
-        }
-        header.hero {
-            color: #e2e8f0;
-            text-align: center;
-        }
-        header.hero h1 {
-            margin: 0;
-            font-size: clamp(2rem, 5vw, 2.5rem);
-            letter-spacing: -0.02em;
-        }
-        header.hero p {
-            margin: 0.5rem auto 0;
-            max-width: 560px;
-            color: #cbd5f5;
-        }
-        .control-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 0.75rem;
-        }
-        input[type="file"], select {
-            width: 100%;
-            border: 1px solid #e2e8f0;
-            padding: 0.9rem 1rem;
-            font-size: 1rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            background: #fefefe;
-        }
-        input[type="file"]:focus-visible, select:focus-visible {
-            outline: 2px solid #2563eb;
-            box-shadow: none;
-        }
-        .progress-wrap {
-            display: flex;
-            flex-direction: column;
-            gap: 0.35rem;
-        }
-        .status-label {
-            font-weight: 600;
-            color: #0f172a;
-        }
-        .status-badge {
-            font-size: 0.9rem;
-            color: #475569;
-            min-height: 1.4em;
-        }
-        .progress-bar {
-            width: 100%;
-            height: 10px;
-            background: #e2e8f0;
-            overflow: hidden;
-        }
-        .progress-bar span {
-            display: block;
-            height: 100%;
-            width: 0;
-            background: linear-gradient(90deg, #2563eb, #7c3aed);
-            transition: width 0.2s ease;
-        }
-        .progress-note {
-            font-size: 0.85rem;
-            color: #475569;
-        }
-        #resultCanvas {
-            width: 100%;
-            background: repeating-linear-gradient(45deg, #e2e8f0, #e2e8f0 10px, #f8fafc 10px, #f8fafc 20px);
-            min-height: 280px;
-            object-fit: contain;
-            display: none;
-        }
-        footer.thanks {
-            background: #111827;
-            color: #e2e8f0;
-            padding: 1.5rem;
-            border-radius: 0;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
-        }
-        footer.thanks h2 {
-            margin: 0 0 0.5rem;
-            font-size: 1rem;
-            letter-spacing: 0.05em;
-        }
-        footer.thanks p {
-            margin: 0;
-            font-size: 0.9rem;
-            color: #cfd8ff;
-            line-height: 1.4;
-        }
-        @media (max-width: 640px) {
-            .surface {
-                padding: 1.5rem;
-            }
-            .panel {
-                padding: 1.5rem;
-            }
-        }
-        footer{
-            color: #e2e8f0;
-        }
-    </style>
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
     <div class="surface">
@@ -157,16 +37,25 @@
             <canvas id="resultCanvas"></canvas>
         </section>
         <footer>
-            <h3>Thanks</h3>
-                <h4>Library</h4>
+            <h3>Special Thanks</h3>
+                    <h4>Library</h4>
                     <h5>Transformers.js</h5>
-                    <p>{クレジット表記}</p>
-                <h4>Models</h4>
+                    <p>
+                        Hugging Faceが提供する最先端の機械学習ライブラリ <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a> を使用しています。ブラウザ上での高速なAI推論を実現しています。
+                    </p>
+
+                    <h4>Models</h4>
                     <h5>RMBG-1.4</h5>
-                    <p>{クレジット表記}</p>
-                    <h5>MODnet</h5>
-                    <p>{クレジット表記}</p>
-            
+                    <p>
+                        <a href="https://bria.ai/" target="_blank">BRIA AI</a> によって開発された高品質な背景除去モデルです。
+                        ライセンス：<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ja" target="_blank">CC BY-NC 4.0</a>（非商用利用）。
+                    </p>
+
+                    <h5>MODNet</h5>
+                    <p>
+                        <a href="https://github.com/ZHKUN/MODNet" target="_blank">ZHKUN</a> 氏らによって提案された、リアルタイム処理に優れたポートレート（人物）特化型の切り抜きモデルです。
+                    </p>
+
             <p>&copy; 2026 Povo43</p>
         </footer>
     </div>
