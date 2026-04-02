@@ -5,32 +5,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zero-Copy BG Remover</title>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; padding: 20px; }
-        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 100%; max-width: 600px; text-align: center; }
-        #resultCanvas { max-width: 100%; margin-top: 20px; border-radius: 8px; display: none; background-image:
-            linear-gradient(45deg, #ccc 25%, transparent 25%),
-            linear-gradient(-45deg, #ccc 25%, transparent 25%),
-            linear-gradient(45deg, transparent 75%, #ccc 75%),
-            linear-gradient(-45deg, transparent 75%, #ccc 75%);
-            background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px; }
-        .status { margin: 15px 0; color: #555; font-weight: bold; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #00d6ba; padding: 20px; }
+        .container { padding: 2rem; border-radius: 12px; width: 100%; max-width: 600px; text-align: center; }
+        
+        .status { margin: 15px 0; color: #555; font-weight: bold; min-height: 1.2em; }
         input[type="file"] { margin-bottom: 20px; }
-        select { width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid #ccc; margin-top: 0.5rem; background: #fff; }
+        select { width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; background: #1df5d8; cursor: pointer; }
+
+        /* キャンバスとローダーの親コンテナ */
+        #canvas-container {
+            position: relative;
+            margin-top: 20px;
+            display: none; /* 初期状態は非表示 */
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            /* 背景の格子模様 */
+            background-image: 
+                linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                linear-gradient(-45deg, #ccc 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #ccc 75%),
+                linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: #eee;
+        }
+
+        #resultCanvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        #downloadBtn {
+            margin: 10px 0 20px;
+            padding: 10px 20px;
+            background: #01e4c5;
+            color: black;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        #downloadBtn:hover {
+            background: #00b386;
+        }
+
+        /* オーバーレイ */
+        #loader-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+
+        .hidden { display: none !important; }
+
+        /* くるくる（スピナー） */
+        .spinner {
+            width: 50px; height: 50px;
+            border: 5px solid rgba(255, 255, 255, 0.2);
+            border-top: 5px solid #00ffcc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .progress-bar-container { width: 70%; height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+        #progress-bar { width: 0%; height: 100%; background: #00ffcc; transition: width 0.3s ease; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Zero-Copy 背景除去 (On-Device)</h1>
-        <p style="font-size: 0.9rem; color: #888;">Transformers.js v4 と WebAssembly/WebGPU を使って、ブラウザ上で透明背景を生成します。</p>
+        <h1>背景除去</h1>
+        <p style="font-size: 0.85rem; color: #888; margin-top: -10px;">ファイルはデバイス上で処理します。</p>
         
         <input type="file" id="fileInput" accept="image/*">
+        <select id="model_list"></select>
         <div id="status" class="status">画像を選択してください</div>
-        <select id="model_list">
-            <option selected disabled>モデルを読み込み中...</option>
-        </select>
         
-        <canvas id="resultCanvas"></canvas>
+        <button id="downloadBtn" class="hidden">画像を保存する (PNG)</button>
+
+        <div id="canvas-container">
+            <canvas id="resultCanvas"></canvas>
+            <div id="loader-overlay" class="hidden">
+                <div class="spinner"></div>
+                <p id="status-text" style="margin: 0;">準備中...</p>
+                <div class="progress-bar-container">
+                    <div id="progress-bar"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -39,21 +113,27 @@
         const modellist_ui = document.getElementById('model_list');
         const status = document.getElementById('status');
         const resultCanvas = document.getElementById('resultCanvas');
+        const canvasContainer = document.getElementById('canvas-container');
         const ctx = resultCanvas.getContext('2d');
+        const loader = document.getElementById('loader-overlay');
+        const statusText = document.getElementById('status-text');
+        const progressBar = document.getElementById('progress-bar');
+        const downloadBtn = document.getElementById('downloadBtn');
+        
         let now_model = null;
 
         const modellist = {
-            "modnet": {
-                path: "Xenova/modnet",
-                description: "軽量かつ高速",
-                device: "wasm",
-                dtype: "q8"
-            },
-            "test": {
+            "RMBG-1.4": {
                 path: "briaai/RMBG-1.4",
-                description: "高品質",
+                description: "高品質・汎用",
                 device: "wasm",
                 dtype: "fp32"
+            },
+            "MODNet": {
+                path: "Xenova/modnet",
+                description: "人物特化・高速",
+                device: "wasm",
+                dtype: "q8"
             }
         };
 
@@ -63,43 +143,46 @@
             return `${deviceLabel} ${dtypeLabel}`;
         };
 
-        document.addEventListener('DOMContentLoaded', async () => {
+        // 初期化: モデルリストの生成
+        document.addEventListener('DOMContentLoaded', () => {
             modellist_ui.innerHTML = '';
-
             Object.entries(modellist).forEach(([key, model]) => {
                 const opt = document.createElement('option');
                 opt.value = model.path;
-                opt.textContent = `${key} (${model.description}) ・ ${formatModelLabel(model)}`;
+                opt.textContent = `${model.description} (${key})`;
                 modellist_ui.appendChild(opt);
             });
-
-            if (modellist_ui.options.length > 0) {
-                modellist_ui.selectedIndex = 0;
-            }
-            await updateNowModel();
+            updateNowModel();
         });
 
-        async function updateNowModel() {
+        function updateNowModel() {
             const selectedPath = modellist_ui.value;
             now_model = Object.values(modellist).find(m => m.path === selectedPath);
         }
         
-        fileInput.addEventListener('change', async () => {
-            await sendtoworker();
-        });
-        modellist_ui.addEventListener('change', async () => {
-            await updateNowModel();
-            await sendtoworker();
+        fileInput.addEventListener('change', sendtoworker);
+        modellist_ui.addEventListener('change', () => {
+            updateNowModel();
+            sendtoworker();
         });
         
         async function sendtoworker() {
             const file = fileInput.files?.[0];
             if (!file || !now_model) return;
 
-            status.textContent = "画像を準備しています...";
+            // UIの初期化
+            status.textContent = "画像を読み込み中...";
+            downloadBtn.classList.add('hidden');
+            canvasContainer.style.display = 'inline-block';
+            loader.classList.remove('hidden');
+            progressBar.style.width = '0%';
             
             const bitmap = await createImageBitmap(file);
             const { width, height } = bitmap;
+            
+            resultCanvas.width = width;
+            resultCanvas.height = height;
+
             const offscreen = new OffscreenCanvas(width, height);
             const offCtx = offscreen.getContext('2d');
             offCtx.drawImage(bitmap, 0, 0);
@@ -107,10 +190,6 @@
             const imageData = offCtx.getImageData(0, 0, width, height);
             const buffer = imageData.data.buffer;
 
-            const deviceLabel = now_model.device === 'webgpu' ? 'WebGPU' : 'WASM';
-            const dtypeLabel = now_model.dtype ? now_model.dtype.toUpperCase() : 'AUTO';
-            status.textContent = `${now_model.path} を ${deviceLabel}/${dtypeLabel} で推論中...`;
-            
             worker.postMessage({ 
                 buffer, 
                 width, 
@@ -120,17 +199,28 @@
                 dtype: now_model.dtype
             }, [buffer]);
         }
+
         worker.onmessage = (e) => {
-            const { outputBuffer, width, height, error } = e.data;
+            const data = e.data;
+
+            // 進捗メッセージの処理
+            if (data?.type === 'progress') {
+                statusText.innerText = data.detail;
+                if (data.progress !== undefined) {
+                    progressBar.style.width = `${data.progress}%`;
+                }
+                return;
+            }
+
+            const { outputBuffer, width, height, error } = data;
             
             if (error) {
+                loader.classList.add('hidden');
                 err(error);
                 return;
             }
 
-            resultCanvas.width = width;
-            resultCanvas.height = height;
-
+            // 結果の描画
             const outputImageData = new ImageData(
                 new Uint8ClampedArray(outputBuffer), 
                 width, 
@@ -138,9 +228,18 @@
             );
             ctx.putImageData(outputImageData, 0, 0);
 
-            resultCanvas.style.display = 'block';
+            // ローダーを隠して完了
+            downloadBtn.classList.remove('hidden');
+            loader.classList.add('hidden');
             status.textContent = "背景切り抜きが完了しました";
         };
+
+        downloadBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'background-removed.png';
+            link.href = resultCanvas.toDataURL('image/png');
+            link.click();
+        });
 
         function err(e) {
             status.textContent = "エラー: " + e;
