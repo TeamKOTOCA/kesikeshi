@@ -3,135 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zero-Copy BG Remover</title>
+    <title>KesiKeshi</title>
+    <meta name="description" content="画像を選ぶだけで、ブラウザの中で背景が透明になった新しい写真を作れます。">
+    <meta property="og:title" content="KesiKeshi">
+    <meta property="og:description" content="画像をドラッグするだけで、背景をきれいに除去したPNGをダウンロード。技術知識は不要です。">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://kesikeshi.local/">
+    <meta property="og:image" content="https://dummyimage.com/1200x630/1f2933/ffffff.png&amp;text=Zero-Copy+BG">
+    <meta name="twitter:card" content="summary_large_image">
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #00d6ba; padding: 20px; }
-        .container { padding: 2rem; border-radius: 12px; width: 100%; max-width: 600px; text-align: center; }
-        
-        .status { margin: 15px 0; color: #555; font-weight: bold; min-height: 1.2em; }
-        input[type="file"] { margin-bottom: 20px; }
-        select { width: 100%; padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; background: #1df5d8; cursor: pointer; }
-
-        /* キャンバスとローダーの親コンテナ */
-        #canvas-container {
-            position: relative;
-            margin-top: 20px;
-            display: none; /* 初期状態は非表示 */
-            width: 100%;
-            border-radius: 8px;
-            overflow: hidden;
-            /* 背景の格子模様 */
-            background-image: 
-                linear-gradient(45deg, #ccc 25%, transparent 25%), 
-                linear-gradient(-45deg, #ccc 25%, transparent 25%),
-                linear-gradient(45deg, transparent 75%, #ccc 75%),
-                linear-gradient(-45deg, transparent 75%, #ccc 75%);
-            background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-            background-color: #eee;
+        :root {
+            font: 400 16px "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+            color: #111;
+            background-color: #0f172a;
         }
-
-        #resultCanvas {
-            display: block;
-            width: 100%;
-            height: auto;
-        }
-
-        #downloadBtn {
-            margin: 10px 0 20px;
-            padding: 10px 20px;
-            background: #01e4c5;
-            color: black;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-
-        #downloadBtn:hover {
-            background: #00b386;
-        }
-
-        /* オーバーレイ */
-        #loader-overlay {
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 55%), #0f172a; display: flex; justify-content: center; }
+        .surface {
+            width: min(100%, 960px);
+            padding: 2.5rem;
             display: flex;
             flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            z-index: 10;
+            gap: 1.5rem;
         }
-
-        .hidden { display: none !important; }
-
-        /* くるくる（スピナー） */
-        .spinner {
-            width: 50px; height: 50px;
-            border: 5px solid rgba(255, 255, 255, 0.2);
-            border-top: 5px solid #00ffcc;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 15px;
+        .panel {
+            background: #ffffff;
+            padding: 2rem;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.35);
+            display: grid;
+            gap: 1.25rem;
         }
-
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        .progress-bar-container { width: 70%; height: 6px; background: #333; border-radius: 3px; overflow: hidden; margin-top: 10px; }
-        #progress-bar { width: 0%; height: 100%; background: #00ffcc; transition: width 0.3s ease; }
+        header.hero {
+            color: #e2e8f0;
+            text-align: center;
+        }
+        header.hero h1 {
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 2.5rem);
+            letter-spacing: -0.02em;
+        }
+        header.hero p {
+            margin: 0.5rem auto 0;
+            max-width: 560px;
+            color: #cbd5f5;
+        }
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+        input[type="file"], select {
+            width: 100%;
+            border: 1px solid #e2e8f0;
+            padding: 0.9rem 1rem;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fefefe;
+        }
+        input[type="file"]:focus-visible, select:focus-visible {
+            outline: 2px solid #2563eb;
+            box-shadow: none;
+        }
+        .progress-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+        .status-label {
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .status-badge {
+            font-size: 0.9rem;
+            color: #475569;
+            min-height: 1.4em;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background: #e2e8f0;
+            overflow: hidden;
+        }
+        .progress-bar span {
+            display: block;
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, #2563eb, #7c3aed);
+            transition: width 0.2s ease;
+        }
+        .progress-note {
+            font-size: 0.85rem;
+            color: #475569;
+        }
+        #resultCanvas {
+            width: 100%;
+            background: repeating-linear-gradient(45deg, #e2e8f0, #e2e8f0 10px, #f8fafc 10px, #f8fafc 20px);
+            min-height: 280px;
+            object-fit: contain;
+            display: none;
+        }
+        footer.thanks {
+            background: #111827;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 0;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+        }
+        footer.thanks h2 {
+            margin: 0 0 0.5rem;
+            font-size: 1rem;
+            letter-spacing: 0.05em;
+        }
+        footer.thanks p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #cfd8ff;
+            line-height: 1.4;
+        }
+        @media (max-width: 640px) {
+            .surface {
+                padding: 1.5rem;
+            }
+            .panel {
+                padding: 1.5rem;
+            }
+        }
+        footer{
+            color: #e2e8f0;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>背景除去</h1>
-        <p style="font-size: 0.85rem; color: #888; margin-top: -10px;">ファイルはデバイス上で処理します。</p>
-        
-        <input type="file" id="fileInput" accept="image/*">
-        <select id="model_list"></select>
-        <div id="status" class="status">画像を選択してください</div>
-        
-        <button id="downloadBtn" class="hidden">画像を保存する (PNG)</button>
-
-        <div id="canvas-container">
-            <canvas id="resultCanvas"></canvas>
-            <div id="loader-overlay" class="hidden">
-                <div class="spinner"></div>
-                <p id="status-text" style="margin: 0;">準備中...</p>
-                <div class="progress-bar-container">
-                    <div id="progress-bar"></div>
-                </div>
+    <div class="surface">
+        <header class="hero">
+            <h1>KesiKeshi</h1>
+            <p>画像をアップロードするだけで、デバイス上で背景透過画像を作れます。</p>
+        </header>
+        <section class="panel">
+            <div class="control-grid">
+                <label for="fileInput">アップロードする画像</label>
+                <input type="file" id="fileInput" accept="image/*">
+                <label for="model_list">モデル</label>
+                <select id="model_list">
+                    <option selected disabled>モデルを読み込み中...</option>
+                </select>
             </div>
-        </div>
-    </div>
+            <div class="progress-wrap">
+                <span class="status-label">処理ステータス</span>
+                <div id="status" class="status-badge">画像を選択してください</div>
+                <div class="progress-bar"><span id="progressBarFill"></span></div>
+                <div id="progressPercent" class="progress-note">進捗: 0%</div>
+            </div>
+            <canvas id="resultCanvas"></canvas>
+        </section>
+        <footer>
+            <h3>Thanks</h3>
+            <h4>Models</h4>
+            <h5>RMBG-1.4</h5>
+            <p>
 
+            </p>
+            
+            <p>&copy; 2026 Povo43</p>
+        </footer>
+    </div>
     <script type="module">
         const worker = new Worker('worker.js', { type: 'module' });
         const fileInput = document.getElementById('fileInput');
         const modellist_ui = document.getElementById('model_list');
         const status = document.getElementById('status');
         const resultCanvas = document.getElementById('resultCanvas');
-        const canvasContainer = document.getElementById('canvas-container');
         const ctx = resultCanvas.getContext('2d');
-        const loader = document.getElementById('loader-overlay');
-        const statusText = document.getElementById('status-text');
-        const progressBar = document.getElementById('progress-bar');
-        const downloadBtn = document.getElementById('downloadBtn');
-        
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressPercent = document.getElementById('progressPercent');
         let now_model = null;
 
         const modellist = {
             "RMBG-1.4": {
                 path: "briaai/RMBG-1.4",
-                description: "高品質・汎用",
+                description: "高品質",
                 device: "wasm",
                 dtype: "fp32"
             },
-            "MODNet": {
+            "modnet": {
                 path: "Xenova/modnet",
-                description: "人物特化・高速",
+                description: "軽量&高速",
                 device: "wasm",
                 dtype: "q8"
             }
@@ -143,56 +199,64 @@
             return `${deviceLabel} ${dtypeLabel}`;
         };
 
-        // 初期化: モデルリストの生成
-        document.addEventListener('DOMContentLoaded', () => {
+        const updateStatus = (text, percent = null) => {
+            status.textContent = text;
+            if (typeof percent === 'number') {
+                const clamped = Math.min(100, Math.max(0, Math.round(percent)));
+                progressBarFill.style.width = `${clamped}%`;
+                progressPercent.textContent = `進捗: ${clamped}%`;
+            } else {
+                progressPercent.textContent = '進捗: ---';
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async () => {
             modellist_ui.innerHTML = '';
+
             Object.entries(modellist).forEach(([key, model]) => {
                 const opt = document.createElement('option');
                 opt.value = model.path;
-                opt.textContent = `${model.description} (${key})`;
+                opt.textContent = `${model.description}モデル (${key})`;
                 modellist_ui.appendChild(opt);
             });
-            updateNowModel();
+
+            if (modellist_ui.options.length > 0) {
+                modellist_ui.selectedIndex = 0;
+            }
+            await updateNowModel();
         });
 
-        function updateNowModel() {
+        async function updateNowModel() {
             const selectedPath = modellist_ui.value;
             now_model = Object.values(modellist).find(m => m.path === selectedPath);
         }
-        
-        fileInput.addEventListener('change', sendtoworker);
-        modellist_ui.addEventListener('change', () => {
-            updateNowModel();
-            sendtoworker();
+
+        fileInput.addEventListener('change', async () => {
+            await sendtoworker();
         });
-        
+        modellist_ui.addEventListener('change', async () => {
+            await updateNowModel();
+            await sendtoworker();
+        });
+
         async function sendtoworker() {
             const file = fileInput.files?.[0];
             if (!file || !now_model) return;
 
-            // UIの初期化
-            status.textContent = "画像を読み込み中...";
-            downloadBtn.classList.add('hidden');
-            canvasContainer.style.display = 'inline-block';
-            loader.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            
+            updateStatus('画像を準備しています...', 5);
             const bitmap = await createImageBitmap(file);
             const { width, height } = bitmap;
-            
-            resultCanvas.width = width;
-            resultCanvas.height = height;
-
             const offscreen = new OffscreenCanvas(width, height);
             const offCtx = offscreen.getContext('2d');
             offCtx.drawImage(bitmap, 0, 0);
-            
             const imageData = offCtx.getImageData(0, 0, width, height);
             const buffer = imageData.data.buffer;
 
-            worker.postMessage({ 
-                buffer, 
-                width, 
+            updateStatus('背景をきれいに切り抜いています...', 20);
+
+            worker.postMessage({
+                buffer,
+                width,
                 height,
                 modelPath: now_model.path,
                 device: now_model.device,
@@ -202,47 +266,33 @@
 
         worker.onmessage = (e) => {
             const data = e.data;
-
-            // 進捗メッセージの処理
             if (data?.type === 'progress') {
-                statusText.innerText = data.detail;
-                if (data.progress !== undefined) {
-                    progressBar.style.width = `${data.progress}%`;
-                }
+                const suffix = typeof data.progress === 'number' ? ` (${data.progress}%)` : '';
+                updateStatus(`${data.detail}${suffix}`, data.progress ?? null);
                 return;
             }
-
             const { outputBuffer, width, height, error } = data;
-            
+
             if (error) {
-                loader.classList.add('hidden');
                 err(error);
                 return;
             }
 
-            // 結果の描画
+            resultCanvas.width = width;
+            resultCanvas.height = height;
             const outputImageData = new ImageData(
-                new Uint8ClampedArray(outputBuffer), 
-                width, 
+                new Uint8ClampedArray(outputBuffer),
+                width,
                 height
             );
             ctx.putImageData(outputImageData, 0, 0);
 
-            // ローダーを隠して完了
-            downloadBtn.classList.remove('hidden');
-            loader.classList.add('hidden');
-            status.textContent = "背景切り抜きが完了しました";
+            resultCanvas.style.display = 'block';
+            updateStatus('背景切り抜きが完了しました', 100);
         };
 
-        downloadBtn.addEventListener('click', () => {
-            const link = document.createElement('a');
-            link.download = 'background-removed.png';
-            link.href = resultCanvas.toDataURL('image/png');
-            link.click();
-        });
-
         function err(e) {
-            status.textContent = "エラー: " + e;
+            updateStatus('エラー: ' + e, 0);
             console.error(e);
         }
     </script>
