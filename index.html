@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KesiKeshi</title>
     <meta name="description" content="画像を選ぶだけで、ブラウザの中で背景が透明になった新しい写真を作れます。">
+    <meta name="theme-color" content="#0f172a">
+    <link rel="manifest" href="./manifest.webmanifest">
     <meta property="og:title" content="KesiKeshi">
     <meta property="og:description" content="画像をドラッグするだけで、背景をきれいに除去したPNGをダウンロード。技術知識は不要です。">
     <meta property="og:type" content="website">
@@ -34,29 +36,47 @@
                 <div class="progress-bar"><span id="progressBarFill"></span></div>
                 <div id="progressPercent" class="progress-note">進捗: 0%</div>
             </div>
+            <button id="download_button">ダウンロード</button>
             <canvas id="resultCanvas"></canvas>
         </section>
+        
+        <section id="thanks">
+        <h2>Thanks</h2>
+        <div id="table_scroller">
+            <table>
+                <thead>
+                    <tr>
+                        <th>カテゴリー</th>
+                        <th>名称</th>
+                        <th class="desc">概要</th>
+                        <th>ライセンス / リンク</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Library</td>
+                        <td>Transformers.js</td>
+                        <td class="desc">Hugging Faceが提供する最先端の機械学習ライブラリ。ブラウザ上での高速なAI推論を実現しています。</td>
+                        <td><a href="https://huggingface.co/docs/transformers.js" target="_blank">Link</a></td>
+                    </tr>
+                    <tr>
+                        <td rowspan="2">Models</td>
+                        <td>RMBG-1.4</td>
+                        <td class="desc">BRIA AIによって開発された高品質な背景除去モデル。</td>
+                        <td><a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ja" target="_blank">CC BY-NC 4.0</a></td>
+                    </tr>
+                    <tr>
+                        <td>MODNet</td>
+                        <td class="desc">ZHKUN氏らによって提案された、リアルタイム処理に優れたポートレート特化型の切り抜きモデル。</td>
+                        <td><a href="https://github.com/ZHKUN/MODNet" target="_blank">GitHub</a></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        </section>
+
         <footer>
-            <h3>Special Thanks</h3>
-                    <h4>Library</h4>
-                    <h5>Transformers.js</h5>
-                    <p>
-                        Hugging Faceが提供する最先端の機械学習ライブラリ <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a> を使用しています。ブラウザ上での高速なAI推論を実現しています。
-                    </p>
-
-                    <h4>Models</h4>
-                    <h5>RMBG-1.4</h5>
-                    <p>
-                        <a href="https://bria.ai/" target="_blank">BRIA AI</a> によって開発された高品質な背景除去モデルです。
-                        ライセンス：<a href="https://creativecommons.org/licenses/by-nc/4.0/deed.ja" target="_blank">CC BY-NC 4.0</a>（非商用利用）。
-                    </p>
-
-                    <h5>MODNet</h5>
-                    <p>
-                        <a href="https://github.com/ZHKUN/MODNet" target="_blank">ZHKUN</a> 氏らによって提案された、リアルタイム処理に優れたポートレート（人物）特化型の切り抜きモデルです。
-                    </p>
-
-            <p>&copy; 2026 Povo43</p>
+            <p>&copy; 2026 <a href="https://github.com/povo-43">Povo43</a></p>
         </footer>
     </div>
     <script type="module">
@@ -68,6 +88,7 @@
         const ctx = resultCanvas.getContext('2d');
         const progressBarFill = document.getElementById('progressBarFill');
         const progressPercent = document.getElementById('progressPercent');
+        const download_button = document.getElementById('download_button');
         let now_model = null;
 
         const modellist = {
@@ -82,6 +103,13 @@
                 description: "軽量&高速",
                 device: "wasm",
                 dtype: "q8"
+            },
+            "test": {
+                path: "Xenova/face-parsing",
+                description: "マスクテスト用",
+                device: "wasm",
+                dtype: "q8",
+                masks: [1, 2, 3, 4, 5, 10, 11, 12, 13]
             }
         };
 
@@ -103,6 +131,7 @@
         };
 
         document.addEventListener('DOMContentLoaded', async () => {
+            download_button.style.display = "none";
             modellist_ui.innerHTML = '';
 
             Object.entries(modellist).forEach(([key, model]) => {
@@ -152,7 +181,8 @@
                 height,
                 modelPath: now_model.path,
                 device: now_model.device,
-                dtype: now_model.dtype
+                dtype: now_model.dtype,
+                masks: Array.isArray(now_model.masks) ? now_model.masks : undefined
             }, [buffer]);
         }
 
@@ -181,11 +211,37 @@
 
             resultCanvas.style.display = 'block';
             updateStatus('背景切り抜きが完了しました', 100);
+            download_button.style.display = "block";
         };
+
+        download_button.addEventListener('click', () => {
+            const dataURL = resultCanvas.toDataURL('image/png');
+            
+            const link = document.createElement('a');
+            
+            const now = new Date();
+            const timestamp = now.getFullYear() + 
+                String(now.getMonth() + 1).padStart(2, '0') + 
+                String(now.getDate()).padStart(2, '0') + "_" + 
+                String(now.getHours()).padStart(2, '0') + 
+                String(now.getMinutes()).padStart(2, '0');
+                
+            link.download = `kesikeshi_${timestamp}.png`;
+            link.href = dataURL;
+            
+            link.click();
+        });
 
         function err(e) {
             updateStatus('エラー: ' + e, 0);
             console.error(e);
+        }
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./pwa-sw.js').catch((err) => {
+                    console.warn('Service worker registration failed', err);
+                });
+            });
         }
     </script>
 </body>

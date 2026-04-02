@@ -74,7 +74,7 @@
             display: block;
             height: 100%;
             width: 0;
-            background: linear-gradient(90deg, #2563eb, #7c3aed);
+            background: linear-gradient(90deg, #427dfc, #100ea8);
             transition: width 0.2s ease;
         }
         .progress-note {
@@ -88,24 +88,18 @@
             object-fit: contain;
             display: none;
         }
-        footer.thanks {
-            background: #111827;
-            color: #e2e8f0;
-            padding: 1.5rem;
+        #download_button {
+            background-color: #041130;
+            color: #cbd5f5;
             border-radius: 0;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+            padding: 1em 2em;
+            transition: all 0.2s;
         }
-        footer.thanks h2 {
-            margin: 0 0 0.5rem;
-            font-size: 1rem;
-            letter-spacing: 0.05em;
+        #download_button:hover {
+            background-color: #172b5a;
+            transform: translateY(-3px);
         }
-        footer.thanks p {
-            margin: 0;
-            font-size: 0.9rem;
-            color: #cfd8ff;
-            line-height: 1.4;
-        }
+
         @media (max-width: 640px) {
             .surface {
                 padding: 1.5rem;
@@ -114,6 +108,37 @@
                 padding: 1.5rem;
             }
         }
+
         footer{
             color: #e2e8f0;
+            text-align: center;
+        }
+
+        #thanks h2{
+            color: #cbd5f5;
+        }
+        #table_scroller{
+            width: 100%;
+            max-width: 1000px;
+            overflow-x: auto;
+            color: #cbd5f5;
+        }
+        table{
+            border-collapse: collapse;
+            width: max-content;
+        }
+        tr{
+            border-bottom: #cfd8ff solid 1px;
+        }
+        tr > :nth-child(1), tr > :nth-child(2) {
+            width: fit-content;
+        }
+        th.desc,td.desc {
+            width: 25em;
+        }
+        a{
+            color: #6b86ff;
+        }
+        a:hover{
+            color: #a1b2ff;
         }
