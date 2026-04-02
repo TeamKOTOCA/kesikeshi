@@ -45,8 +45,8 @@ const composeSelectedMasks = (segments, maskIndices, pixelCount) => {
     return hasPixels ? { data: combined } : null;
 };
 
-const postProgress = (detail, progress = null) => {
-    const message = { type: 'progress', detail };
+const postProgress = (detail, progress = null, requestId = null) => {
+    const message = { type: 'progress', detail, requestId };
     if (typeof progress === 'number') {
         message.progress = Math.min(100, Math.max(0, Math.round(progress)));
     }
@@ -54,12 +54,12 @@ const postProgress = (detail, progress = null) => {
 };
 
 self.onmessage = async (e) => {
-    const { buffer, width, height, modelPath, device, dtype, masks: requestedMasks } = e.data;
+    const { buffer, width, height, modelPath, device, dtype, masks: requestedMasks, requestId } = e.data;
 
     try {
         const resolvedDevice = device ?? 'wasm';
         const resolvedDtype = dtype ?? (resolvedDevice === 'webgpu' ? 'fp32' : 'q8');
-        postProgress('モデルを初期化しています', 5);
+        postProgress('モデルを初期化しています', 5, requestId);
 
         if (!segmenter || initializedConfig?.modelPath !== modelPath || initializedConfig.device !== resolvedDevice || initializedConfig.dtype !== resolvedDtype) {
             segmenter = await pipeline('image-segmentation', modelPath, {
@@ -71,7 +71,7 @@ self.onmessage = async (e) => {
                 device: resolvedDevice,
                 dtype: resolvedDtype
             };
-            postProgress('モデルを読み込みました', 20);
+            postProgress('モデルを読み込みました', 20, requestId);
         }
 
         // RGBA -> RGB 螟画鋤
@@ -85,18 +85,18 @@ self.onmessage = async (e) => {
             rgb[i * 3 + 2] = rgba[i * 4 + 2];
             if (i % convertChunk === 0) {
                 const percent = 30 + (i / totalPixels) * 20;
-                postProgress('ピクセルを変換中', percent);
+                postProgress('ピクセルを変換中', percent, requestId);
             }
         }
-        postProgress('ピクセル変換完了', 45);
+        postProgress('ピクセル変換完了', 45, requestId);
 
         const rawImage = new RawImage(rgb, width, height, 3);
 
         // 謗ｨ隲門ｮ溯｡・
-        postProgress('セグメンテーションを実行しています', 50);
+        postProgress('セグメンテーションを実行しています', 50, requestId);
         const output = await segmenter(rawImage);
-        postProgress('セグメンテーション完了', 60);
-
+        postProgress('セグメンテーション完了', 60, requestId);
+console.log(new Set(output.data));
         const segments = Array.isArray(output) ? output : [output];
         const fallbackMask = output?.mask ?? segments[0]?.mask;
         let mask = fallbackMask;
@@ -119,15 +119,16 @@ self.onmessage = async (e) => {
             outRGBA[i * 4 + 3] = mask.data[i];    // A
             if (i % maskChunk === 0) {
                 const percent = 65 + (i / totalPixels) * 20;
-                postProgress('マスクを合成中', percent);
+                postProgress('マスクを合成中', percent, requestId);
             }
         }
 
         const outBuffer = outRGBA.buffer;
-        postProgress('出力を準備中', 90);
-        postProgress('完了しました', 100);
+        postProgress('出力を準備中', 90, requestId);
+        postProgress('完了しました', 100, requestId);
         self.postMessage({
             type: 'result',
+            requestId,
             outputBuffer: outBuffer,
             width: width,
             height: height
@@ -137,6 +138,7 @@ self.onmessage = async (e) => {
         console.error(err);
         self.postMessage({
             type: 'error',
+            requestId,
             error: err.message
         });
     }

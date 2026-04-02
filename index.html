@@ -22,9 +22,12 @@
             <p>画像をアップロードするだけで、デバイス上で背景透過画像を作れます。</p>
         </header>
         <section class="panel">
+            <label for="drop-zone">アップロードする画像</label>
+            <div id="dropZone" class="drop-zone" role="button" tabindex="0">
+                <p>ファイルをドロップしてアップロード</p>
+                <p class="hint">またはクリックしてファイルを選択（最大 10MB）</p>
+            </div>
             <div class="control-grid">
-                <label for="fileInput">アップロードする画像</label>
-                <input type="file" id="fileInput" accept="image/*">
                 <label for="model_list">モデル</label>
                 <select id="model_list">
                     <option selected disabled>モデルを読み込み中...</option>
@@ -36,8 +39,7 @@
                 <div class="progress-bar"><span id="progressBarFill"></span></div>
                 <div id="progressPercent" class="progress-note">進捗: 0%</div>
             </div>
-            <button id="download_button">ダウンロード</button>
-            <canvas id="resultCanvas"></canvas>
+            <div id="resultsContainer" class="results-grid" aria-live="polite"></div>
         </section>
         
         <section id="thanks">
@@ -82,36 +84,40 @@
     <script type="module">
         const worker = new Worker('worker.js', { type: 'module' });
         const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const resultsContainer = document.getElementById('resultsContainer');
         const modellist_ui = document.getElementById('model_list');
         const status = document.getElementById('status');
-        const resultCanvas = document.getElementById('resultCanvas');
-        const ctx = resultCanvas.getContext('2d');
         const progressBarFill = document.getElementById('progressBarFill');
         const progressPercent = document.getElementById('progressPercent');
-        const download_button = document.getElementById('download_button');
-        let now_model = null;
 
         const modellist = {
             "RMBG-1.4": {
                 path: "briaai/RMBG-1.4",
-                description: "高品質",
+                description: "Background Remover",
                 device: "wasm",
                 dtype: "fp32"
             },
             "modnet": {
                 path: "Xenova/modnet",
-                description: "軽量&高速",
+                description: "Portrait Mask",
                 device: "wasm",
                 dtype: "q8"
             },
             "test": {
                 path: "Xenova/face-parsing",
-                description: "マスクテスト用",
+                description: "Face Parsing (test)",
                 device: "wasm",
                 dtype: "q8",
                 masks: [1, 2, 3, 4, 5, 10, 11, 12, 13]
             }
         };
+
+        const queue = [];
+        let now_model = null;
+        let processing = false;
+        let requestCounter = 0;
+        const pendingRequests = new Map();
 
         const formatModelLabel = (model) => {
             const deviceLabel = model.device === 'webgpu' ? 'WEBGPU' : 'WASM';
@@ -124,47 +130,139 @@
             if (typeof percent === 'number') {
                 const clamped = Math.min(100, Math.max(0, Math.round(percent)));
                 progressBarFill.style.width = `${clamped}%`;
-                progressPercent.textContent = `進捗: ${clamped}%`;
+                progressPercent.textContent = `${clamped}%`;
             } else {
-                progressPercent.textContent = '進捗: ---';
+                progressPercent.textContent = '---';
             }
         };
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            download_button.style.display = "none";
+        document.addEventListener('DOMContentLoaded', () => {
             modellist_ui.innerHTML = '';
-
             Object.entries(modellist).forEach(([key, model]) => {
                 const opt = document.createElement('option');
                 opt.value = model.path;
-                opt.textContent = `${model.description}モデル (${key})`;
+                opt.textContent = `${model.description} (${key}) — ${formatModelLabel(model)}`;
                 modellist_ui.appendChild(opt);
             });
 
             if (modellist_ui.options.length > 0) {
                 modellist_ui.selectedIndex = 0;
             }
-            await updateNowModel();
+
+            attachDropZone();
+            updateNowModel();
+            updateStatus('Images ready', 0);
         });
 
-        async function updateNowModel() {
+        function updateNowModel() {
             const selectedPath = modellist_ui.value;
-            now_model = Object.values(modellist).find(m => m.path === selectedPath);
+            now_model = Object.values(modellist).find(m => m.path === selectedPath) ?? null;
+            if (!now_model) {
+                updateStatus('Select a model', 0);
+            } else {
+                updateStatus(`Model selected: ${now_model.description}`, 0);
+            }
+            processQueue();
         }
 
-        fileInput.addEventListener('change', async () => {
-            await sendtoworker();
-        });
-        modellist_ui.addEventListener('change', async () => {
-            await updateNowModel();
-            await sendtoworker();
+        modellist_ui.addEventListener('change', () => {
+            updateNowModel();
         });
 
-        async function sendtoworker() {
-            const file = fileInput.files?.[0];
-            if (!file || !now_model) return;
+        fileInput.addEventListener('change', (event) => {
+            handleFiles(event.target.files);
+            fileInput.value = '';
+        });
 
-            updateStatus('画像を準備しています...', 5);
+        const attachDropZone = () => {
+            const prevent = (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+            };
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((name) => {
+                dropZone.addEventListener(name, prevent);
+            });
+            dropZone.addEventListener('dragenter', () => dropZone.classList.add('is-active'));
+            dropZone.addEventListener('dragover', () => dropZone.classList.add('is-active'));
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('is-active'));
+            dropZone.addEventListener('drop', (event) => {
+                dropZone.classList.remove('is-active');
+                handleFiles(event.dataTransfer?.files);
+            });
+            dropZone.addEventListener('click', () => fileInput.click());
+            dropZone.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    fileInput.click();
+                }
+            });
+        };
+
+        const handleFiles = (fileList) => {
+            const files = Array.from(fileList ?? []).filter(file => file.type.startsWith('image/'));
+            if (!files.length) {
+                updateStatus('Please choose image files', 0);
+                return;
+            }
+            files.forEach(file => queue.push(file));
+            processQueue();
+        };
+
+        const processQueue = async () => {
+            if (processing) return;
+            if (!now_model) return;
+            processing = true;
+            while (queue.length) {
+                const file = queue.shift();
+                const card = createResultCard(file.name);
+                updateStatus(`Processing: ${file.name}`, 5);
+                try {
+                    await processFile(file, card);
+                    card.statusEl.textContent = 'Complete';
+                    card.progressEl.textContent = '100%';
+                } catch (error) {
+                    card.statusEl.textContent = 'Error';
+                    card.progressEl.textContent = '0%';
+                    card.card.classList.add('is-error');
+                    updateStatus(error?.message ?? 'Error while processing files', 0);
+                }
+            }
+            processing = false;
+            updateStatus('Ready for new images', 0);
+        };
+
+        const createResultCard = (fileName) => {
+            const card = document.createElement('article');
+            card.className = 'result-card';
+            card.innerHTML = `
+                <header>
+                    <div>
+                        <strong>${fileName}</strong>
+                        <p class="result-status">Waiting...</p>
+                    </div>
+                    <span class="result-progress">0%</span>
+                </header>
+                <div class="canvas-wrap">
+                    <canvas></canvas>
+                </div>
+                <div class="result-actions">
+                    <button type="button" disabled>Download PNG</button>
+                </div>
+            `;
+            resultsContainer.prepend(card);
+            const canvas = card.querySelector('canvas');
+            return {
+                card,
+                canvas,
+                ctx: canvas.getContext('2d'),
+                statusEl: card.querySelector('.result-status'),
+                progressEl: card.querySelector('.result-progress'),
+                downloadButton: card.querySelector('button')
+            };
+        };
+
+        const processFile = async (file, cardRefs) => {
+            const requestId = ++requestCounter;
             const bitmap = await createImageBitmap(file);
             const { width, height } = bitmap;
             const offscreen = new OffscreenCanvas(width, height);
@@ -173,9 +271,12 @@
             const imageData = offCtx.getImageData(0, 0, width, height);
             const buffer = imageData.data.buffer;
 
-            updateStatus('背景をきれいに切り抜いています...', 20);
+            const requestPromise = new Promise((resolve, reject) => {
+                pendingRequests.set(requestId, { ...cardRefs, resolve, reject });
+            });
 
             worker.postMessage({
+                requestId,
                 buffer,
                 width,
                 height,
@@ -184,58 +285,65 @@
                 dtype: now_model.dtype,
                 masks: Array.isArray(now_model.masks) ? now_model.masks : undefined
             }, [buffer]);
-        }
 
-        worker.onmessage = (e) => {
-            const data = e.data;
-            if (data?.type === 'progress') {
-                const suffix = typeof data.progress === 'number' ? ` (${data.progress}%)` : '';
-                updateStatus(`${data.detail}${suffix}`, data.progress ?? null);
-                return;
-            }
-            const { outputBuffer, width, height, error } = data;
-
-            if (error) {
-                err(error);
-                return;
-            }
-
-            resultCanvas.width = width;
-            resultCanvas.height = height;
+            const result = await requestPromise;
+            const { outputBuffer, width: resultWidth, height: resultHeight } = result;
+            cardRefs.canvas.width = resultWidth;
+            cardRefs.canvas.height = resultHeight;
             const outputImageData = new ImageData(
                 new Uint8ClampedArray(outputBuffer),
-                width,
-                height
+                resultWidth,
+                resultHeight
             );
-            ctx.putImageData(outputImageData, 0, 0);
-
-            resultCanvas.style.display = 'block';
-            updateStatus('背景切り抜きが完了しました', 100);
-            download_button.style.display = "block";
+            cardRefs.ctx.putImageData(outputImageData, 0, 0);
+            cardRefs.downloadButton.disabled = false;
+            cardRefs.downloadButton.addEventListener('click', () => {
+                const dataUrl = cardRefs.canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = dataUrl;
+                link.download = `kesikeshi_${createTimestamp(file.name)}.png`;
+                link.click();
+            }, { once: true });
         };
 
-        download_button.addEventListener('click', () => {
-            const dataURL = resultCanvas.toDataURL('image/png');
-            
-            const link = document.createElement('a');
-            
-            const now = new Date();
-            const timestamp = now.getFullYear() + 
-                String(now.getMonth() + 1).padStart(2, '0') + 
-                String(now.getDate()).padStart(2, '0') + "_" + 
-                String(now.getHours()).padStart(2, '0') + 
-                String(now.getMinutes()).padStart(2, '0');
-                
-            link.download = `kesikeshi_${timestamp}.png`;
-            link.href = dataURL;
-            
-            link.click();
-        });
+        worker.onmessage = (event) => {
+            const data = event.data;
+            if (!data?.requestId) return;
+            const entry = pendingRequests.get(data.requestId);
+            if (data.type === 'progress') {
+                if (entry) {
+                    const suffix = typeof data.progress === 'number' ? ` (${data.progress}%)` : '';
+                    entry.statusEl.textContent = `${data.detail}${suffix}`;
+                    if (typeof data.progress === 'number') {
+                        entry.progressEl.textContent = `${Math.min(100, Math.max(0, Math.round(data.progress)))}%`;
+                    }
+                }
+                updateStatus(data.detail, data.progress ?? null);
+                return;
+            }
+            pendingRequests.delete(data.requestId);
+            if (!entry) return;
+            if (data.type === 'error' || data.error) {
+                entry.statusEl.textContent = 'Error';
+                entry.progressEl.textContent = '0%';
+                entry.card.classList.add('is-error');
+                entry.reject(new Error(data.error || 'Unknown error'));
+                return;
+            }
+            entry.resolve({
+                outputBuffer: data.outputBuffer,
+                width: data.width,
+                height: data.height
+            });
+        };
 
-        function err(e) {
-            updateStatus('エラー: ' + e, 0);
-            console.error(e);
-        }
+        const createTimestamp = (fileName) => {
+            const now = new Date();
+            const pad = (value) => String(value).padStart(2, '0');
+            const sanitized = fileName.replace(/[^a-zA-Z0-9_-]/g, '_');
+            return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}_${sanitized}`;
+        };
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./pwa-sw.js').catch((err) => {
@@ -244,5 +352,7 @@
             });
         }
     </script>
+
+
 </body>
 </html>
