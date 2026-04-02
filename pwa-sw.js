@@ -29,29 +29,32 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  if (!event.request.url.startsWith('http')) return;
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type === 'opaque') {
-            return networkResponse;
-          }
-
+    // 1. まずネットワークにリクエストを投げる
+    fetch(event.request)
+      .then((networkResponse) => {
+        // レスポンスが正常ならキャッシュを更新して返す
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type !== 'opaque') {
           const clone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return networkResponse;
-        })
-        .catch(() => {
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // 2. ネットワーク失敗時（オフライン）のみキャッシュを確認
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          
+          // 3. キャッシュにもない場合のフォールバック
           if (event.request.mode === 'navigate') {
             return caches.match('./index.html');
           }
           return caches.match('./public/icon-192.png');
         });
-    })
+      })
   );
 });
