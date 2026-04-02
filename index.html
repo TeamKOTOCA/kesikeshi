@@ -44,6 +44,7 @@
         
         <section id="thanks">
         <h2>Thanks</h2>
+        <p>このサイトは<a herf="https://github.com/povo-43">Povo43</a>のTransformers.jsへの興味によって趣味で作られました。</p>
         <div id="table_scroller">
             <table>
                 <thead>
@@ -94,19 +95,19 @@
         const modellist = {
             "RMBG-1.4": {
                 path: "briaai/RMBG-1.4",
-                description: "Background Remover",
+                description: "高性能",
                 device: "wasm",
                 dtype: "fp32"
             },
             "modnet": {
                 path: "Xenova/modnet",
-                description: "Portrait Mask",
+                description: "軽量&高速",
                 device: "wasm",
                 dtype: "q8"
             },
             "test": {
                 path: "Xenova/face-parsing",
-                description: "Face Parsing (test)",
+                description: "非推奨",
                 device: "wasm",
                 dtype: "q8",
                 masks: [1, 2, 3, 4, 5, 10, 11, 12, 13]
