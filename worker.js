@@ -3,7 +3,7 @@
 env.allowLocalModels = true;
 env.useBrowserCache = true;
 env.allowRemoteModels = false;
-env.localModelPath = 'https://kesikeshi.kotoca.net/models/';
+env.localModelPath = `${self.location.origin}/models/`;
 
 const semanticSegmentationMappings = AutoModelForSemanticSegmentation.MODEL_CLASS_MAPPINGS?.[0];
 if (semanticSegmentationMappings && !semanticSegmentationMappings.has('SegformerForSemanticSegmentation')) {
