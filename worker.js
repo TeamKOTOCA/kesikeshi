@@ -1,7 +1,9 @@
-﻿import { pipeline, env, RawImage, AutoModelForSemanticSegmentation } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.0-next.7';
+﻿import { pipeline, env, RawImage, AutoModelForSemanticSegmentation , AutoProcessor} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.0-next.7';
 
-env.allowLocalModels = false;
+env.allowLocalModels = true;
 env.useBrowserCache = true;
+env.allowRemoteModels = false;
+env.localModelPath = 'http://127.0.0.1:5500/models/';
 
 const semanticSegmentationMappings = AutoModelForSemanticSegmentation.MODEL_CLASS_MAPPINGS?.[0];
 if (semanticSegmentationMappings && !semanticSegmentationMappings.has('SegformerForSemanticSegmentation')) {
@@ -9,6 +11,7 @@ if (semanticSegmentationMappings && !semanticSegmentationMappings.has('Segformer
 }
 
 let segmenter;
+let processor;
 
 let initializedConfig;
 
@@ -58,19 +61,21 @@ self.onmessage = async (e) => {
 
     try {
         const resolvedDevice = device ?? 'wasm';
-        const resolvedDtype = dtype ?? (resolvedDevice === 'webgpu' ? 'fp32' : 'q8');
-        postProgress('モデルを初期化しています', 5, requestId);
+        const resolvedDtype = dtype ?? 'q8';
 
-        if (!segmenter || initializedConfig?.modelPath !== modelPath || initializedConfig.device !== resolvedDevice || initializedConfig.dtype !== resolvedDtype) {
+        if (!segmenter || initializedConfig?.modelPath !== modelPath) {
+            postProgress('モデルを初期化しています', 5, requestId);
+
+            // 先にプロセッサを読み込んでからパイプラインへ渡す
+            // `this.processor` が関数として得られるようにします
+            processor = await AutoProcessor.from_pretrained(modelPath);
             segmenter = await pipeline('image-segmentation', modelPath, {
                 device: resolvedDevice,
-                dtype: resolvedDtype
+                dtype: resolvedDtype,
+                processor,
             });
-            initializedConfig = {
-                modelPath,
-                device: resolvedDevice,
-                dtype: resolvedDtype
-            };
+
+            initializedConfig = { modelPath, device: resolvedDevice, dtype: resolvedDtype };
             postProgress('モデルを読み込みました', 20, requestId);
         }
 
@@ -96,7 +101,7 @@ self.onmessage = async (e) => {
         postProgress('セグメンテーションを実行しています', 50, requestId);
         const output = await segmenter(rawImage);
         postProgress('セグメンテーション完了', 60, requestId);
-console.log(new Set(output.data));
+
         const segments = Array.isArray(output) ? output : [output];
         const fallbackMask = output?.mask ?? segments[0]?.mask;
         let mask = fallbackMask;

@@ -1,0 +1,6 @@
+{
+  "model_type": "ben",
+  "transformers.js_config": {
+    "dtype": "fp16"
+  }
+}
